@@ -3,12 +3,17 @@ Daily web scraping from different sections of 20minutos newspaper
 """
 from abc import ABC
 from datetime import datetime
+import logging
+import yaml
+from pathlib import Path
 
 from scrapy.crawler import CrawlerProcess
 from scrapy.spiders import CrawlSpider, Rule
 from scrapy.linkextractors import LinkExtractor
 
 from newsstandalyzer.db.db import NewsDB
+
+log = logging.getLogger(__name__)
 
 
 class Spider20minutos(CrawlSpider, ABC):
@@ -34,13 +39,21 @@ class Spider20minutos(CrawlSpider, ABC):
                            deny=['/archivo', '/opinion', '/fotos', '/videos'])),
     )
 
-    def __init__(self, db_conf):
+    def __init__(self):
         super().__init__()
-        self.db = NewsDB(**db_conf)
+        # Load DB settings
+        db_settings_path = Path(__file__).parent / "../db/db_settings.yaml"
+        with db_settings_path.open() as f:
+            db_settings = yaml.load(f, Loader=yaml.FullLoader)
+        self.db = NewsDB(**db_settings['db_settings'])
 
     @staticmethod
     def datetime_format(datetime_str: str = None):
-        return datetime.strptime(datetime_str.split("-")[0].strip(), "%d.%m.%Y")
+        if isinstance(datetime_str, str):
+            return datetime.strptime(datetime_str.split("-")[0].strip(), "%d.%m.%Y")
+        else:
+            log.warning(msg="Unknown type for datetime. Returning None.")
+            return None
 
     def parse_article(self, response):
         url = response.url
@@ -85,12 +98,6 @@ class Spider20minutos(CrawlSpider, ABC):
 
 
 if __name__ == '__main__':
-    db_conf = {
-        "host": "localhost",
-        "port": 27017,
-        "db": "newsstandalyzer",
-        "collection": "articles"
-    }
     process = CrawlerProcess()
-    process.crawl(Spider20minutos, db_conf)
+    process.crawl(Spider20minutos)
     process.start()
